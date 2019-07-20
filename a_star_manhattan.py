@@ -149,6 +149,7 @@ class AStarNode:
             valueAtDestination = self.nodeState[locationOfDestinationTile[0]][locationOfDestinationTile[1]]
             #Now define the new board state and swap the values
             childBoardState = None
+            #Is Python pass by ref, I had no idea?
             childBoardState = copy.deepcopy(self.nodeState)
             childBoardState[locationOfDestinationTile[0]][locationOfDestinationTile[1]] = '0'
             childBoardState[self.locationOfZero [0]][self.locationOfZero [1] ] = valueAtDestination
@@ -203,15 +204,21 @@ def main():
     iterations = 0 
 
     while not foundTheEndState and pq.qsize() > 0 and iterations < 1000:
+        #let us get the current board state from the queue
         popVal = pq.get()
+        #Because of tie breakers, we dereference the 4th element of the array
         node = popVal[3]
+        #then create the places we can go to from there
         node.createChildren()
         numChildNodes = node.getNumberOfChildren()
+        #printing out the current board state, prior to going to the next board
         print(getBoardStateAsString(node.nodeState))
 
         for cn in range(0,numChildNodes):
             childNode = node.childNodes[cn]
+            #and we enqueue each of the children made
             pq.put( ( childNode.g + childNode.h, getBoardStateAsString(childNode.nodeState), random.random() , childNode) )
+            #unless if we get to the end state
             if childNode.h == 0 :
                 foundTheEndState = True
                 endNode = childNode
