@@ -1,5 +1,8 @@
 #!/usr/bin/python
 import argparse
+import copy
+from queue import PriorityQueue
+import random
 
 #Define the possible moves for 0 at any given location in the 3x3 grid
 #The start location of 0 is defined as [x,y] that correspondes to the positions in the array
@@ -7,7 +10,7 @@ import argparse
 #While x2 is between 0 and 2, inclusive; AND y2 is betwee 0 and 2, inclusive
 #Given that we can only move up, down, left and right, the range of all valid moves can be described as:
 
-vm = {
+vmDelta = {
             'L' : [0,-1],
             'R' : [0,1],
             'U' : [-1,0],
@@ -33,7 +36,6 @@ validMovesPerGridLocation = {
 #Let's also define the goal state, so we can easily compare it to a given state
 #So we can calculate the distance between any given misplaced tile and where it should be:
 goalState = {
-    '0' : [0,0],
     '1' : [0,1],
     '2' : [0,2],
     '3' : [1,0],
@@ -44,32 +46,32 @@ goalState = {
     '8' : [2,2]
 }
 
+
 #And what's really cool about this is we can use goalState to help calculate the distance at any given time:
 
 def calculateManhattanPoints ( board ): 
-    #print(board)
     points = 0
     for x in range(0,len(board)) :
         for y in range(0,len(board[x])) :
-            #the example in the video only counts a sum of 8 tiles
-            #I don't think it's necessary to exclude tile 0
-            #And whether 1 move away from goal state is 2 points or 1 point
-            #Doesn't particularly matter as long as h*(n) is decreasing
-            #But would this count as an overestimation?
+            #0 doesn't need to be calculated
+            if board[x][y] == '0':
+                continue
             current = [x,y]
-            goal = goalState[board[x][y]]
+            goal = goalState[str(board[x][y])]
             if current != goal :
                 #Calculate points here
                 #Which we can do by finding the |delta x| + |delta y| of
                 #current --> goal
-                points += abs(int(current[0]) + goal[0]) + abs(int(current[1]) + goal[1])
-    #print(points)             
+                points += abs(int(current[0]) - goal[0]) + abs(int(current[1]) - goal[1])
+    return points       
 
 #Iterate through the matrix and print out the location each number
 #TODO: Print 0 as ' '
-def printBoardState( board ):
+def getBoardStateAsString( board ):
+    output = ''
     for row in board:
-        print("{0} {1} {2}".format(row[0],row[1],row[2]))
+        output += "{0} {1} {2}\n".format(row[0],row[1],row[2])
+    return output
 
 #Convert the file input from our format of n,n,n|n,n,n|n,n,n
 #to a 3x3 matrix
@@ -113,67 +115,57 @@ def validateInput( board ):
     return True
     
 
-class EightBlockNode:
-    def __init__(self, boardState, costSoFare, estimatedDistance = -1):
-        self.boardState = boardState
-        self.g = costSoFare
-        self.h = estimatedDistance
-        self.locationOfZero = self.findZero(boardState)
-        if estimatedDistance != 0:
-            self.children = self.getChildren(self,self.findMovesForZero(locationOfZero),boardState)
-        else:
-            print("Solution found")
-        
-        print("Total Distance traversed: {0}".format(g+h))
-    
+#g is the cost to reach all previous nodes
+#h is the cost to reach this node
+class AStarNode:
+    def __init__(self, nodeState, g, h, previousNode ):
+        self.nodeState = nodeState
+        self.g = g
+        self.h = h
+        self.parent = previousNode
+        #print('previous Parent: {0}'.format(previousNode))
+        self.childNodes = []
 
-    def findZero(self, board ) :
-        #This code is reused a lot, I know
-        #It could be done as a lambda or even as a numpy array
-        #But this is just readable
-        for x in range(0,len(board)) :
-            for y in range(0,len(board[x])) :
-                return [x,y]
+    #This is the equivalent of 'Expanding' on page 94
+    def createChildren(self):
+        #find the current location of 0
+        #iterate through the matrix
 
-    def findMovesForZero (self, zero) :
+        for x in range(0,len(self.nodeState)) :
+            for y in range(0,len(self.nodeState[x])) :
+                if self.nodeState[x][y] == '0':
+                    self.locationOfZero = [x,y]    
 
-                return validMovesPerGridLocation[zero[0] + ',' + zero[1]]
+        #get list of valid moves:
+        self.validMoves = validMovesPerGridLocation[str(self.locationOfZero[0])+','+str(self.locationOfZero[1])]
 
-    def getChildren( validMovesOfZero, boardState ):
-        #We need to make a board state for each move
-        childBoardStates = []
-        for move in validMovesOfZero:
-            #Dereference the values fromt he global that defines valid moves based on location
-            valuesToDeltaZero = vm[move]
-            #Here destinate location
-            locationOfDestinationTile = [abs(self.locationOfZero[0] + vm[0]),abs(self.locationOfZero[1] + vm[1])]
+        #with the valid move sets let us generate the child nodes:
+        for vm in self.validMoves:
+            #this is where get the values to apply to the 0 to find the new boardState
+            valuesToDeltaZero = vmDelta[vm]
+            #and then we find where 0 is going:
+            locationOfDestinationTile = [abs(int(self.locationOfZero [0]) + int(valuesToDeltaZero[0])),abs( int(self.locationOfZero [1]) + int(valuesToDeltaZero[1]))]
             #Withwhich we get the value at the destination
-            valueAtDestination = boardState[locationOfDestinationTile[0],locationOfDestinationTile[1]]
-            #now we swap with 0
-            childBoardState = boardState
-            childBoardState[locationOfDestinationTile[0],locationOfDestinationTile[1]] = 0
-            childBoardState[self.locationOfZero[0] , self.locationOfZero[1] ] = valueAtDestination
-            #With this new board state we can calculate the manhattan distance:
-            manhattanDistance = calculateManhattanPoints(childBoardState)
-            #If the manhatta Distance is 0, pack it up, we found it
-            
-            childBoardStates.append( [childBoardState, costSoFare + manhattanDistance, manhattanDistance] )
+            valueAtDestination = self.nodeState[locationOfDestinationTile[0]][locationOfDestinationTile[1]]
+            #Now define the new board state and swap the values
+            childBoardState = None
+            childBoardState = copy.deepcopy(self.nodeState)
+            childBoardState[locationOfDestinationTile[0]][locationOfDestinationTile[1]] = '0'
+            childBoardState[self.locationOfZero [0]][self.locationOfZero [1] ] = valueAtDestination
 
-        #only travel to the board that has the smallest manhattanDistance, I think
-        smallestManhattan = -1
-        for cb in range(0,len(ChildBoardStates)):
-            if smallestManhattan == -1:
-                smallestManhattan = cb
+            
+            h_val = calculateManhattanPoints(childBoardState)
+
+            if self.parent is None:
+                self.childNodes.append( AStarNode(childBoardState,self.g + h_val,h_val, self) )
                 continue
             
-            if childBoardStates[cb][2] <= childBoardStates[smallestManhattan][2]:
-                smallestManhattan = cb            
-
-
-
-            
-
-
+            if getBoardStateAsString(childBoardState) != getBoardStateAsString(self.parent.nodeState):
+                self.childNodes.append( AStarNode(childBoardState,self.g + h_val, h_val, self) )
+        
+        #print('child nodes created: {0}'.format(self.getNumberOfChildren()))
+    def getNumberOfChildren(self) :
+        return len(self.childNodes)
 
 def main():
     parser = argparse.ArgumentParser("a_star_manhattan")
@@ -188,27 +180,54 @@ def main():
 
     boardIsValid = validateInput(slideBoard)
 
-    #printBoardState(slideBoard)
 
-    #calculateManhattanPoints(slideBoard)
+    if  not boardIsValid :
+        print("I am sorry, but the board is not valid, please run the program again")
+        print("If you do not know the format, please use -h")
+        return
 
-    tree =  EightBlockNode(slideBoard, 0, -1)
-    
+    head = AStarNode(slideBoard,0,0,None)
+
+    #add into priority queue
+    pq = PriorityQueue()
+
+    #So on occassion we get to a point where we might have two choices
+    #that have the same f value and the same board state
+    #What does it matter then? Let's flip a coin
+    #flip a coin
+    pq.put((0,0,random.random(),head))
+
+    foundTheEndState = False
+    endNode = None
+
+    iterations = 0 
+
+    while not foundTheEndState and pq.qsize() > 0 and iterations < 1000:
+        popVal = pq.get()
+        node = popVal[3]
+        node.createChildren()
+        numChildNodes = node.getNumberOfChildren()
+        print(getBoardStateAsString(node.nodeState))
+
+        for cn in range(0,numChildNodes):
+            childNode = node.childNodes[cn]
+            pq.put( ( childNode.g + childNode.h, getBoardStateAsString(childNode.nodeState), random.random() , childNode) )
+            if childNode.h == 0 :
+                foundTheEndState = True
+                endNode = childNode
+                break 
+                    
+        if foundTheEndState:
+            break
 
 
-'''
-    while( boardIsValid == False ):
-        print('Bad input please try again')
-        print('Only the first like of the file will be read, and it must be formatted like this:')
-        print('#,#,#|#,#,#|#,#,#')
-        print('where each # is a unique integer  between 0 and 8, inclusive')
-        print('Enter a new file to read:')
-
-        #get new file
-        f = open(args.start, "r")
-
-        line = f.readline()
-'''
+    if foundTheEndState :
+        print("We made it!")
+        print(getBoardStateAsString(endNode.nodeState))
+    if iterations >= 1000 :
+        print("I am sorry to say, that I can't realisticly find an answer on a first geneartion i3 with 2gb of ram")
+    else :
+        print('bad things happened')
 
 
 
