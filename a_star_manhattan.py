@@ -212,7 +212,7 @@ def main():
         node.createChildren()
         numChildNodes = node.getNumberOfChildren()
         #printing out the current board state, prior to going to the next board
-        print(getBoardStateAsString(node.nodeState))
+        print(getBoardStateAsString(node.nodeState).replace('0','_'))
 
         for cn in range(0,numChildNodes):
             childNode = node.childNodes[cn]
@@ -230,7 +230,7 @@ def main():
 
     if foundTheEndState :
         print("We made it!")
-        print(getBoardStateAsString(endNode.nodeState))
+        print(getBoardStateAsString(endNode.nodeState).replace('0','_'))
     if iterations >= 1000 :
         print("I am sorry to say, that I can't realisticly find an answer on a first geneartion i3 with 2gb of ram")
     else :
